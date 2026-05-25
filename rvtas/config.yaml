@@ -1,0 +1,27 @@
+# config.yaml — RVTAS all parameters
+input: "C:/Users/Pujitha/Downloads/FREE STOCK FOOTAGE - Heavy traffic [get.gt].mp4"
+output: reports/output_annotated.mp4
+
+dft_radius: 30
+min_tracks: 50
+max_speed_kmh: 120
+
+# 4 pixel points on the road surface (tuned for this video)
+src_pts:
+  - [160, 280]
+  - [480, 280]
+  - [530, 340]
+  - [110, 340]
+
+# Corresponding real-world coordinates (metres)
+dst_pts_metres:
+  - [0.0, 0.0]
+  - [7.0, 0.0]
+  - [7.0, 15.0]
+  - [0.0, 15.0]
+
+hog_win_stride: [16, 16]
+hog_padding: [4, 4]
+hog_scale: 1.05
+nms_iou_thresh: 0.4
+heatmap_interval_sec: 999
