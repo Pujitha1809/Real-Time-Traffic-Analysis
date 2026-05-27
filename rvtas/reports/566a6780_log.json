@@ -1,0 +1,12 @@
+{
+  "input": "uploads\\566a6780_FREE STOCK FOOTAGE - Heavy traffic [get.gt].mp4",
+  "output": "reports\\566a6780_out.mp4",
+  "total_vehicles": 823,
+  "avg_speed_kmh": 42.0,
+  "pedestrian_events": 1,
+  "frames_processed": 283,
+  "duration_sec": 9.94,
+  "heatmap_saves": [
+    "reports/sample_heatmap.png"
+  ]
+}

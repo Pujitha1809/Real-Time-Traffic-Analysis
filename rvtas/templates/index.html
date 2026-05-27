@@ -1,0 +1,877 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>RVTAS — Traffic Analytics</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Barlow:wght@300;400;600;700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg:        #0a0c0f;
+      --surface:   #111418;
+      --border:    #1e2530;
+      --accent:    #00e5a0;
+      --accent2:   #0088ff;
+      --warn:      #ff6b35;
+      --text:      #c8d0db;
+      --muted:     #4a5568;
+      --mono:      'Share Tech Mono', monospace;
+      --sans:      'Barlow', sans-serif;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--sans);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow-x: hidden;
+    }
+
+    /* ── Scanline overlay ── */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background: repeating-linear-gradient(
+        0deg,
+        transparent,
+        transparent 2px,
+        rgba(0,0,0,0.03) 2px,
+        rgba(0,0,0,0.03) 4px
+      );
+      pointer-events: none;
+      z-index: 1000;
+    }
+
+    /* ── Header ── */
+    header {
+      border-bottom: 1px solid var(--border);
+      padding: 20px 40px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      background: var(--surface);
+    }
+
+    .logo-mark {
+      width: 36px;
+      height: 36px;
+      border: 2px solid var(--accent);
+      display: grid;
+      place-items: center;
+      position: relative;
+    }
+    .logo-mark::before {
+      content: '';
+      width: 18px; height: 18px;
+      background: var(--accent);
+      clip-path: polygon(50% 0%, 100% 100%, 0% 100%);
+    }
+
+    .brand h1 {
+      font-family: var(--mono);
+      font-size: 1rem;
+      color: var(--accent);
+      letter-spacing: 0.12em;
+    }
+    .brand p {
+      font-size: 0.7rem;
+      color: var(--muted);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      margin-top: 2px;
+    }
+
+    .status-indicator {
+      margin-left: auto;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-family: var(--mono);
+      font-size: 0.72rem;
+      color: var(--muted);
+    }
+    .status-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--accent);
+      animation: pulse-dot 2s ease-in-out infinite;
+    }
+    @keyframes pulse-dot {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.3; }
+    }
+
+    /* ── Main layout ── */
+    main {
+      flex: 1;
+      max-width: 900px;
+      width: 100%;
+      margin: 0 auto;
+      padding: 48px 24px;
+    }
+
+    /* ── Section labels ── */
+    .section-label {
+      font-family: var(--mono);
+      font-size: 0.65rem;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 12px;
+    }
+    .section-label span {
+      color: var(--accent);
+      margin-right: 6px;
+    }
+
+    /* ── Upload zone ── */
+    #upload-section { margin-bottom: 40px; }
+
+    .drop-zone {
+      border: 1px dashed var(--border);
+      border-radius: 4px;
+      background: var(--surface);
+      padding: 64px 32px;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color 0.2s, background 0.2s;
+      position: relative;
+      overflow: hidden;
+    }
+    .drop-zone::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(135deg, rgba(0,229,160,0.03) 0%, transparent 60%);
+      pointer-events: none;
+    }
+    .drop-zone:hover,
+    .drop-zone.dragging {
+      border-color: var(--accent);
+      background: #111c18;
+    }
+
+    .drop-icon {
+      width: 48px; height: 48px;
+      margin: 0 auto 16px;
+      opacity: 0.4;
+    }
+    .drop-icon svg { width: 100%; height: 100%; }
+
+    .drop-title {
+      font-size: 1rem;
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 6px;
+    }
+    .drop-sub {
+      font-size: 0.8rem;
+      color: var(--muted);
+    }
+    .drop-sub strong {
+      color: var(--accent);
+      font-weight: 400;
+    }
+
+    #file-input { display: none; }
+
+    #file-selected {
+      margin-top: 12px;
+      padding: 10px 16px;
+      background: #0d1a13;
+      border: 1px solid var(--accent);
+      border-radius: 3px;
+      font-family: var(--mono);
+      font-size: 0.78rem;
+      color: var(--accent);
+      display: none;
+      align-items: center;
+      gap: 10px;
+    }
+    #file-selected.visible { display: flex; }
+
+    /* ── Run button ── */
+    #run-btn {
+      margin-top: 16px;
+      width: 100%;
+      padding: 14px 24px;
+      background: var(--accent);
+      color: #000;
+      border: none;
+      border-radius: 3px;
+      font-family: var(--mono);
+      font-size: 0.85rem;
+      letter-spacing: 0.1em;
+      cursor: pointer;
+      font-weight: 700;
+      transition: opacity 0.15s, transform 0.1s;
+      display: none;
+    }
+    #run-btn.visible { display: block; }
+    #run-btn:hover { opacity: 0.88; }
+    #run-btn:active { transform: scale(0.99); }
+    #run-btn:disabled {
+      opacity: 0.3;
+      cursor: not-allowed;
+    }
+
+    /* ── Progress ── */
+    #progress-section {
+      display: none;
+      margin-bottom: 40px;
+    }
+    #progress-section.visible { display: block; }
+
+    .terminal-box {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 20px 24px;
+    }
+
+    .terminal-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 16px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--border);
+    }
+    .t-dot {
+      width: 10px; height: 10px;
+      border-radius: 50%;
+    }
+    .t-dot.red    { background: #ff5f57; }
+    .t-dot.yellow { background: #febc2e; }
+    .t-dot.green  { background: #28c840; }
+    .terminal-title {
+      font-family: var(--mono);
+      font-size: 0.7rem;
+      color: var(--muted);
+      margin-left: auto;
+    }
+
+    .pipeline-stages {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .stage {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-family: var(--mono);
+      font-size: 0.75rem;
+      color: var(--muted);
+      transition: color 0.3s;
+    }
+    .stage.active { color: var(--accent); }
+    .stage.done   { color: #3a5244; }
+
+    .stage-num {
+      width: 20px;
+      text-align: right;
+      flex-shrink: 0;
+    }
+    .stage-bar {
+      flex: 1;
+      height: 2px;
+      background: var(--border);
+      border-radius: 1px;
+      overflow: hidden;
+    }
+    .stage-fill {
+      height: 100%;
+      background: var(--accent);
+      width: 0%;
+      transition: width 2s linear;
+    }
+    .stage.active .stage-fill { width: 60%; }
+    .stage.done   .stage-fill { width: 100%; background: #1a3d2a; }
+
+    .spinner {
+      width: 14px; height: 14px;
+      border: 2px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      flex-shrink: 0;
+    }
+    .stage.done .spinner {
+      border-color: #1a3d2a;
+      border-top-color: #1a3d2a;
+      animation: none;
+    }
+    .stage.done .spinner::after {
+      content: '✓';
+      display: block;
+      text-align: center;
+      line-height: 10px;
+      font-size: 9px;
+      color: var(--accent);
+    }
+    .stage.waiting .spinner {
+      animation: none;
+      border-color: var(--border);
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .progress-footer {
+      margin-top: 16px;
+      font-family: var(--mono);
+      font-size: 0.7rem;
+      color: var(--muted);
+      display: flex;
+      justify-content: space-between;
+    }
+    #elapsed-time { color: var(--accent2); }
+
+    /* ── Results ── */
+    #results-section {
+      display: none;
+      margin-bottom: 40px;
+    }
+    #results-section.visible { display: block; }
+
+    .results-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin-bottom: 16px;
+    }
+
+    @media (max-width: 600px) {
+      .results-grid { grid-template-columns: 1fr; }
+    }
+
+    /* ── Stat cards ── */
+    .stats-row {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+    @media (max-width: 600px) {
+      .stats-row { grid-template-columns: repeat(2, 1fr); }
+    }
+
+    .stat-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 16px;
+      position: relative;
+      overflow: hidden;
+    }
+    .stat-card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 2px;
+      background: var(--accent);
+    }
+    .stat-card.blue::before { background: var(--accent2); }
+    .stat-card.orange::before { background: var(--warn); }
+    .stat-card.purple::before { background: #a78bfa; }
+
+    .stat-label {
+      font-size: 0.65rem;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: var(--muted);
+      margin-bottom: 8px;
+    }
+    .stat-value {
+      font-family: var(--mono);
+      font-size: 1.6rem;
+      color: var(--text);
+      line-height: 1;
+    }
+    .stat-unit {
+      font-size: 0.65rem;
+      color: var(--muted);
+      margin-left: 4px;
+    }
+
+    /* ── Output panels ── */
+    .output-panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      overflow: hidden;
+    }
+    .panel-header {
+      padding: 10px 16px;
+      border-bottom: 1px solid var(--border);
+      font-family: var(--mono);
+      font-size: 0.7rem;
+      color: var(--muted);
+      letter-spacing: 0.1em;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .panel-header a {
+      color: var(--accent);
+      text-decoration: none;
+      font-size: 0.68rem;
+    }
+    .panel-header a:hover { text-decoration: underline; }
+
+    .panel-body { padding: 0; }
+    .panel-body img {
+      width: 100%;
+      display: block;
+    }
+    .panel-body video {
+      width: 100%;
+      display: block;
+      background: #000;
+    }
+
+    /* ── JSON log ── */
+    .log-box {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      overflow: hidden;
+    }
+    .log-content {
+      padding: 16px 20px;
+      font-family: var(--mono);
+      font-size: 0.75rem;
+      line-height: 1.7;
+      color: #6b8a6b;
+      overflow-x: auto;
+      max-height: 200px;
+      overflow-y: auto;
+    }
+    .log-content .key   { color: #7fb3ff; }
+    .log-content .val   { color: var(--accent); }
+    .log-content .str   { color: #e0a96b; }
+    .log-content .num   { color: var(--accent); }
+
+    /* ── New analysis button ── */
+    #new-btn {
+      margin-top: 24px;
+      padding: 12px 28px;
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      border-radius: 3px;
+      font-family: var(--mono);
+      font-size: 0.78rem;
+      letter-spacing: 0.08em;
+      cursor: pointer;
+      transition: border-color 0.2s, color 0.2s;
+    }
+    #new-btn:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    /* ── Error ── */
+    #error-box {
+      display: none;
+      background: #1a0a0a;
+      border: 1px solid #5a1a1a;
+      border-radius: 4px;
+      padding: 16px 20px;
+      font-family: var(--mono);
+      font-size: 0.78rem;
+      color: #ff8080;
+      margin-bottom: 20px;
+    }
+    #error-box.visible { display: block; }
+
+    /* ── Footer ── */
+    footer {
+      border-top: 1px solid var(--border);
+      padding: 16px 40px;
+      display: flex;
+      justify-content: space-between;
+      font-family: var(--mono);
+      font-size: 0.65rem;
+      color: var(--muted);
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="logo-mark"></div>
+    <div class="brand">
+      <h1>RVTAS</h1>
+      <p>Real-Time Vehicle Traffic Analytics System</p>
+    </div>
+    <div class="status-indicator">
+      <div class="status-dot"></div>
+      SYSTEM ONLINE
+    </div>
+  </header>
+
+  <main>
+
+    <!-- Upload -->
+    <section id="upload-section">
+      <p class="section-label"><span>//</span> VIDEO INPUT</p>
+
+      <div class="drop-zone" id="drop-zone">
+        <div class="drop-icon">
+          <svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <rect x="4" y="10" width="40" height="28" rx="3" stroke="currentColor" stroke-width="2"/>
+            <path d="M20 18l10 6-10 6V18z" fill="currentColor" opacity="0.6"/>
+          </svg>
+        </div>
+        <p class="drop-title">Drop traffic video here</p>
+        <p class="drop-sub">
+          or <strong>click to browse</strong> &nbsp;·&nbsp; MP4, AVI, MOV, MKV
+        </p>
+        <input type="file" id="file-input" accept="video/*" />
+      </div>
+
+      <div id="file-selected">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+          <rect x="1" y="1" width="12" height="12" rx="1" stroke="#00e5a0" stroke-width="1.5"/>
+          <path d="M4 7l2 2 4-4" stroke="#00e5a0" stroke-width="1.5" stroke-linecap="round"/>
+        </svg>
+        <span id="file-name">—</span>
+        <span id="file-size" style="margin-left:auto;color:var(--muted)">—</span>
+      </div>
+
+      <button id="run-btn">▶ &nbsp; RUN ANALYSIS</button>
+    </section>
+
+    <!-- Progress -->
+    <section id="progress-section">
+      <p class="section-label"><span>//</span> PIPELINE STATUS</p>
+
+      <div class="terminal-box">
+        <div class="terminal-header">
+          <div class="t-dot red"></div>
+          <div class="t-dot yellow"></div>
+          <div class="t-dot green"></div>
+          <span class="terminal-title">rvtas/main.py — processing</span>
+        </div>
+
+        <div class="pipeline-stages" id="stages">
+          <!-- Populated by JS -->
+        </div>
+
+        <div class="progress-footer">
+          <span>ELAPSED: <span id="elapsed-time">00:00</span></span>
+          <span id="poll-status">POLLING…</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Error -->
+    <div id="error-box"></div>
+
+    <!-- Results -->
+    <section id="results-section">
+      <p class="section-label"><span>//</span> ANALYSIS RESULTS</p>
+
+      <!-- Stat cards -->
+      <div class="stats-row" id="stats-row">
+        <div class="stat-card">
+          <div class="stat-label">Vehicles Detected</div>
+          <div class="stat-value" id="stat-vehicles">—</div>
+        </div>
+        <div class="stat-card blue">
+          <div class="stat-label">Avg Speed</div>
+          <div class="stat-value" id="stat-speed">—<span class="stat-unit">km/h</span></div>
+        </div>
+        <div class="stat-card orange">
+          <div class="stat-label">Pedestrian Events</div>
+          <div class="stat-value" id="stat-peds">—</div>
+        </div>
+        <div class="stat-card purple">
+          <div class="stat-label">Frames Processed</div>
+          <div class="stat-value" id="stat-frames">—</div>
+        </div>
+      </div>
+
+      <!-- Video + Heatmap panels -->
+      <div class="results-grid">
+        <div class="output-panel">
+          <div class="panel-header">
+            ANNOTATED OUTPUT
+            <a id="video-dl" href="#" download>↓ download</a>
+          </div>
+          <div class="panel-body">
+            <video id="result-video" controls></video>
+          </div>
+        </div>
+        <div class="output-panel">
+          <div class="panel-header">
+            TRAFFIC DENSITY HEATMAP
+            <a id="heatmap-dl" href="#" download>↓ download</a>
+          </div>
+          <div class="panel-body">
+            <img id="result-heatmap" src="" alt="Heatmap" />
+          </div>
+        </div>
+      </div>
+
+      <!-- JSON log -->
+      <div class="log-box">
+        <div class="panel-header">
+          RUN LOG (JSON)
+          <a id="log-dl" href="#" download>↓ download</a>
+        </div>
+        <div class="log-content" id="log-content"></div>
+      </div>
+
+      <button id="new-btn">↩ &nbsp; NEW ANALYSIS</button>
+    </section>
+
+  </main>
+
+  <footer>
+    <span>RVTAS — Classical CV Pipeline · No Deep Learning · CPU-Only</span>
+    <span>OpenCV + Flask</span>
+  </footer>
+
+  <script>
+    // ── Stage definitions ──────────────────────────────────────────────────
+    const STAGES = [
+      { id: 1, label: "Camera undistortion" },
+      { id: 2, label: "Background subtraction (MOG2)" },
+      { id: 3, label: "DFT low-pass filter" },
+      { id: 4, label: "Lucas-Kanade optical flow" },
+      { id: 5, label: "Speed estimation via homography" },
+      { id: 6, label: "HOG pedestrian detection" },
+      { id: 7, label: "Heatmap accumulation" },
+      { id: 8, label: "Dashboard overlay + video write" },
+    ];
+
+    // ── DOM refs ──────────────────────────────────────────────────────────
+    const dropZone        = document.getElementById("drop-zone");
+    const fileInput       = document.getElementById("file-input");
+    const fileSelected    = document.getElementById("file-selected");
+    const fileName        = document.getElementById("file-name");
+    const fileSize        = document.getElementById("file-size");
+    const runBtn          = document.getElementById("run-btn");
+    const uploadSection   = document.getElementById("upload-section");
+    const progressSection = document.getElementById("progress-section");
+    const resultsSection  = document.getElementById("results-section");
+    const errorBox        = document.getElementById("error-box");
+    const stagesEl        = document.getElementById("stages");
+    const elapsedEl       = document.getElementById("elapsed-time");
+    const pollStatusEl    = document.getElementById("poll-status");
+    const newBtn          = document.getElementById("new-btn");
+
+    let selectedFile = null;
+    let pollInterval = null;
+    let elapsedInterval = null;
+    let startTime = null;
+    let currentStageIndex = 0;
+    let stageInterval = null;
+
+    // ── Helpers ───────────────────────────────────────────────────────────
+    function formatSize(bytes) {
+      if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB";
+      return (bytes / (1024 * 1024)).toFixed(1) + " MB";
+    }
+
+    function formatElapsed(ms) {
+      const s = Math.floor(ms / 1000);
+      const m = Math.floor(s / 60);
+      return String(m).padStart(2, "0") + ":" + String(s % 60).padStart(2, "0");
+    }
+
+    function buildStages() {
+      stagesEl.innerHTML = "";
+      STAGES.forEach((s, i) => {
+        const div = document.createElement("div");
+        div.className = "stage waiting";
+        div.id = `stage-${i}`;
+        div.innerHTML = `
+          <span class="stage-num">${String(s.id).padStart(2,'0')}</span>
+          <div class="spinner"></div>
+          <span style="flex:1">${s.label}</span>
+          <div class="stage-bar"><div class="stage-fill"></div></div>
+        `;
+        stagesEl.appendChild(div);
+      });
+    }
+
+    function advanceStage() {
+      const all = document.querySelectorAll(".stage");
+      if (currentStageIndex > 0) {
+        all[currentStageIndex - 1].className = "stage done";
+      }
+      if (currentStageIndex < all.length) {
+        all[currentStageIndex].className = "stage active";
+        currentStageIndex++;
+      }
+    }
+
+    function completeAllStages() {
+      document.querySelectorAll(".stage").forEach(s => s.className = "stage done");
+    }
+
+    // ── File selection ────────────────────────────────────────────────────
+    dropZone.addEventListener("click", () => fileInput.click());
+
+    fileInput.addEventListener("change", () => {
+      if (fileInput.files.length) handleFile(fileInput.files[0]);
+    });
+
+    dropZone.addEventListener("dragover", e => {
+      e.preventDefault();
+      dropZone.classList.add("dragging");
+    });
+    dropZone.addEventListener("dragleave", () => dropZone.classList.remove("dragging"));
+    dropZone.addEventListener("drop", e => {
+      e.preventDefault();
+      dropZone.classList.remove("dragging");
+      if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+    });
+
+    function handleFile(file) {
+      selectedFile = file;
+      fileName.textContent = file.name;
+      fileSize.textContent = formatSize(file.size);
+      fileSelected.classList.add("visible");
+      runBtn.classList.add("visible");
+    }
+
+    // ── Run ───────────────────────────────────────────────────────────────
+    runBtn.addEventListener("click", async () => {
+      if (!selectedFile) return;
+
+      // Show progress, hide upload
+      uploadSection.style.display = "none";
+      progressSection.classList.add("visible");
+      errorBox.classList.remove("visible");
+      resultsSection.classList.remove("visible");
+
+      buildStages();
+      currentStageIndex = 0;
+      startTime = Date.now();
+
+      // Elapsed timer
+      elapsedInterval = setInterval(() => {
+        elapsedEl.textContent = formatElapsed(Date.now() - startTime);
+      }, 500);
+
+      // Animate stages (simulate progress while pipeline runs)
+      stageInterval = setInterval(advanceStage, 1800);
+
+      // Upload file
+      const formData = new FormData();
+      formData.append("video", selectedFile);
+
+      let jobId;
+      try {
+        const res = await fetch("/upload", { method: "POST", body: formData });
+        const data = await res.json();
+        if (data.error) throw new Error(data.error);
+        jobId = data.job_id;
+        pollStatusEl.textContent = `JOB: ${jobId}`;
+      } catch (err) {
+        showError("Upload failed: " + err.message);
+        return;
+      }
+
+      // Poll status
+      pollInterval = setInterval(async () => {
+        try {
+          const res  = await fetch(`/status/${jobId}`);
+          const data = await res.json();
+
+          if (data.status === "done") {
+            clearIntervals();
+            completeAllStages();
+            pollStatusEl.textContent = "COMPLETE ✓";
+            setTimeout(() => showResults(data), 500);
+          } else if (data.status === "error") {
+            clearIntervals();
+            showError("Pipeline error: " + (data.error || "unknown"));
+          }
+        } catch (err) {
+          // Network hiccup — keep polling
+        }
+      }, 2000);
+    });
+
+    // ── Results ───────────────────────────────────────────────────────────
+    function showResults(data) {
+      progressSection.classList.remove("visible");
+      resultsSection.classList.add("visible");
+
+      const log = data.log || {};
+
+      document.getElementById("stat-vehicles").textContent = log.total_vehicles ?? "—";
+      document.getElementById("stat-speed").innerHTML =
+        (log.avg_speed_kmh ?? "—") + '<span class="stat-unit">km/h</span>';
+      document.getElementById("stat-peds").textContent = log.pedestrian_events ?? "—";
+      document.getElementById("stat-frames").textContent = log.frames_processed ?? "—";
+
+      const vid = document.getElementById("result-video");
+      vid.src = data.video_url;
+      document.getElementById("video-dl").href = data.video_url;
+
+      const hm = document.getElementById("result-heatmap");
+      hm.src = data.heatmap_url + "?t=" + Date.now(); // bust cache
+      document.getElementById("heatmap-dl").href = data.heatmap_url;
+      document.getElementById("log-dl").href = data.log_url;
+
+      // Pretty-print log
+      const lc = document.getElementById("log-content");
+      lc.innerHTML = syntaxHighlight(JSON.stringify(log, null, 2));
+    }
+
+    function syntaxHighlight(json) {
+      return json
+        .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+        .replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(\.\d+)?)/g, match => {
+          let cls = "num";
+          if (/^"/.test(match)) {
+            cls = /:$/.test(match) ? "key" : "str";
+          } else if (/true|false/.test(match)) {
+            cls = "bool";
+          }
+          return `<span class="${cls}">${match}</span>`;
+        });
+    }
+
+    // ── Error ─────────────────────────────────────────────────────────────
+    function showError(msg) {
+      progressSection.classList.remove("visible");
+      uploadSection.style.display = "";
+      errorBox.textContent = "⚠ " + msg;
+      errorBox.classList.add("visible");
+    }
+
+    // ── Reset ─────────────────────────────────────────────────────────────
+    newBtn.addEventListener("click", () => {
+      clearIntervals();
+      selectedFile = null;
+      fileInput.value = "";
+      fileSelected.classList.remove("visible");
+      runBtn.classList.remove("visible");
+      uploadSection.style.display = "";
+      resultsSection.classList.remove("visible");
+      progressSection.classList.remove("visible");
+      errorBox.classList.remove("visible");
+    });
+
+    function clearIntervals() {
+      if (pollInterval)    clearInterval(pollInterval);
+      if (elapsedInterval) clearInterval(elapsedInterval);
+      if (stageInterval)   clearInterval(stageInterval);
+    }
+  </script>
+</body>
+</html>
